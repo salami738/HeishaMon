@@ -1344,7 +1344,9 @@ void send_heatpump_command(char* topic, char *msg, bool (*send_command)(byte*, i
     if (strcmp(topic, tmp.name) == 0) {
       len = tmp.func(msg, cmd, log_msg);
       log_message(log_msg);
-      if (len > 0 && !(skip_command && skip_command(tmp.name, cmd, len))) send_command(cmd, len);
+      if (len > 0 && !(skip_command && skip_command(tmp.name, cmd, len))) {
+        send_command(cmd, len);
+      }
     }
   }
 
@@ -1425,13 +1427,21 @@ bool heatpump_command_unchanged(const char *name, const unsigned char *cmd, unsi
   for (unsigned int i = 0; i < sizeof(unchangedCommands) / sizeof(unchangedCommands[0]); i++) {
     unchangedCmdStruct tmp;
     memcpy_P(&tmp, &unchangedCommands[i], sizeof(tmp));
-    if (strcmp(name, tmp.name) == 0) mask = tmp.mask;
+    if (strcmp(name, tmp.name) == 0) {
+      mask = tmp.mask;
+    }
   }
-  if (mask == 0 || (byte)data[0] != 0x71 || len > DATASIZE) return false;
+  if (mask == 0 || (byte)data[0] != 0x71 || len > DATASIZE) {
+    return false;
+  }
   bool writes = false;
   for (unsigned int i = 4; i < len; i++) { // bytes 0-3 are the header
-    if (cmd[i] == 0) continue; // 0 keeps the current setting
-    if ((cmd[i] & ~mask) != 0 || ((byte)data[i] & mask) != cmd[i]) return false;
+    if (cmd[i] == 0) { // 0 keeps the current setting
+      continue;
+    }
+    if ((cmd[i] & ~mask) != 0 || ((byte)data[i] & mask) != cmd[i]) {
+      return false;
+    }
     writes = true;
   }
   return writes;

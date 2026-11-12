@@ -682,7 +682,9 @@ static int8_t vm_value_set(struct rules_t *obj) {
         if(stricmp((char *)&key[1], tmp.name) == 0) {
           uint16_t len = tmp.func(payload, cmd, log_msg);
           log_message(log_msg);
-          if (!skip_settings_command(tmp.name, cmd, len)) send_command(cmd, len);
+          if (!skip_settings_command(tmp.name, cmd, len)) {
+            send_command(cmd, len);
+          }
           break;
         }
       }
