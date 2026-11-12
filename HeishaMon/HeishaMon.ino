@@ -117,7 +117,6 @@ QueueHandle_t logQueue = NULL;
 char actData[DATASIZE] = { '\0' };
 char actDataExtra[DATASIZE] = { '\0' };
 char actOptData[OPTDATASIZE]  = { '\0' };
-// main data blocks received since the last settings command was sent, and when the last one arrived
 static uint8_t mainBlocksSinceCommand = 0;
 static unsigned long lastMainBlockTime = 0;
 
@@ -1008,7 +1007,7 @@ bool send_command(byte* command, int length) {
     log_message(_F("Not sending this command. Heishamon in listen only mode!"));
     return false;
   }
-  if (command[0] == 0xf1 && command[1] == 0x6c) mainBlocksSinceCommand = 0; // a settings command
+  if (command[0] == 0xf1 && command[1] == 0x6c) mainBlocksSinceCommand = 0; // the next block may still show the old value
   struct cmdbuffer_t cmd;
   cmd.length = length;
   memcpy(&cmd.data, command, length);
@@ -1024,7 +1023,7 @@ bool send_command(byte* command, int length) {
     log_message(_F("Not sending this command. Heishamon in listen only mode!"));
     return false;
   }
-  if (command[0] == 0xf1 && command[1] == 0x6c) mainBlocksSinceCommand = 0; // a settings command
+  if (command[0] == 0xf1 && command[1] == 0x6c) mainBlocksSinceCommand = 0; // the next block may still show the old value
   if ( sending ) {
     log_message(_F("Already sending data. Buffering this send request"));
     pushCommandBuffer(command, length);
@@ -1044,11 +1043,7 @@ bool send_command(byte* command, int length) {
 }
 #endif
 
-// Called before a settings command built from commands[] is sent; true means
-// it is not sent. That is the case when the heat pump already reports the value
-// the command would set. The data is only trusted when it is fresh: two main
-// data blocks since the last settings command was sent (the first may not show
-// it yet) and the last one not older than three query intervals.
+// Only fresh data proves a value is already set: the first block after a settings command may still show the old value, and old data says nothing about the current state.
 bool skip_settings_command(const char *name, unsigned char *cmd, unsigned int len) {
   if (mainBlocksSinceCommand >= 2 && (unsigned long)(millis() - lastMainBlockTime) <= 3000UL * heishamonSettings.waitTime
       && heatpump_command_unchanged(name, cmd, len, actData)) {

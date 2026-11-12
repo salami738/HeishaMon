@@ -1365,12 +1365,7 @@ void send_heatpump_command(char* topic, char *msg, bool (*send_command)(byte*, i
 
 }
 
-// Settings the main data block reports in the same byte and with the same
-// encoding as their command writes them; mask holds the bits of that byte that
-// belong to the setting. Such a command is not sent while the heat pump already
-// reports the requested value. Not listed: commands that start an action or a
-// timer (force DHW/defrost/sterilization/heater, holiday, powerful, reset),
-// SetPump (not reported), SetCurves (JSON).
+// Only settings the heat pump reports back in the same byte and encoding can be compared. Always sent: commands that start an action or a timer (force DHW/defrost/sterilization/heater, holiday, powerful, reset), because resending them is meant to repeat that action; SetPump is not reported and SetCurves is JSON.
 struct unchangedCmdStruct {
   char name[29];
   byte mask;

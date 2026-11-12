@@ -213,12 +213,8 @@ const optCmdStruct optionalCommands[] PROGMEM = {
   { "SetOptPCBByte9", set_byte_9 }
 };
 
-// True when the main data block data already reports everything the command
-// cmd (built for the command name) would write, so sending it changes nothing.
 bool heatpump_command_unchanged(const char *name, const unsigned char *cmd, unsigned int len, const char *data);
 
-// skip_command (optional) is asked before a built command is sent; returning
-// true means it is not sent.
 void send_heatpump_command(char* topic, char *msg, bool (*send_command)(byte*, int), void (*log_message)(char*), bool optionalPCB, bool (*skip_command)(const char*, unsigned char*, unsigned int) = NULL);
 bool saveOptionalPCB(byte* command, int length);
 bool loadOptionalPCB(byte* command, int length);
