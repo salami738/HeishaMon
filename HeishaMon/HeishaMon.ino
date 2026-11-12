@@ -117,6 +117,9 @@ QueueHandle_t logQueue = NULL;
 char actData[DATASIZE] = { '\0' };
 char actDataExtra[DATASIZE] = { '\0' };
 char actOptData[OPTDATASIZE]  = { '\0' };
+// main data blocks received since the last settings command was sent, and when the last one arrived
+static uint8_t mainBlocksSinceCommand = 0;
+static unsigned long lastMainBlockTime = 0;
 
 // log message to sprintf to
 #define LOG_MSG_SIZE 256
@@ -835,6 +838,8 @@ bool readSerial()
       if (data_length == DATASIZE)  {  //receive a full data block
         if  (data[3] == 0x10) { //decode the normal data block
           decode_heatpump_data(data, actData, mqtt_client, log_message, heishamonSettings.mqtt_topic_base, heishamonSettings.updateAllTime);
+          if (mainBlocksSinceCommand < 255) mainBlocksSinceCommand++;
+          lastMainBlockTime = millis();
           if ( (!extraDataBlockAvailable) && ((actData[0] == 0x71) && (actData[0xc7] >= 3)) ) { //do we have valid header and byte 0xc7 is more or equal 3 then assume K&L and more series
             log_message(_F("Extra data available on this heatpump"));
             extraDataBlockAvailable = true; //request for extra data next run
@@ -1003,6 +1008,7 @@ bool send_command(byte* command, int length) {
     log_message(_F("Not sending this command. Heishamon in listen only mode!"));
     return false;
   }
+  if (command[0] == 0xf1 && command[1] == 0x6c) mainBlocksSinceCommand = 0; // a settings command
   struct cmdbuffer_t cmd;
   cmd.length = length;
   memcpy(&cmd.data, command, length);
@@ -1018,6 +1024,7 @@ bool send_command(byte* command, int length) {
     log_message(_F("Not sending this command. Heishamon in listen only mode!"));
     return false;
   }
+  if (command[0] == 0xf1 && command[1] == 0x6c) mainBlocksSinceCommand = 0; // a settings command
   if ( sending ) {
     log_message(_F("Already sending data. Buffering this send request"));
     pushCommandBuffer(command, length);
@@ -1036,6 +1043,22 @@ bool send_command(byte* command, int length) {
   return true;
 }
 #endif
+
+// Called before a settings command built from commands[] is sent; true means
+// it is not sent. That is the case when the heat pump already reports the value
+// the command would set. The data is only trusted when it is fresh: two main
+// data blocks since the last settings command was sent (the first may not show
+// it yet) and the last one not older than three query intervals.
+bool skip_settings_command(const char *name, unsigned char *cmd, unsigned int len) {
+  if (mainBlocksSinceCommand >= 2 && (unsigned long)(millis() - lastMainBlockTime) <= 3000UL * heishamonSettings.waitTime
+      && heatpump_command_unchanged(name, cmd, len, actData)) {
+    char msg[96];
+    snprintf_P(msg, sizeof(msg), PSTR("%s not sent: the heat pump already reports this value"), name);
+    log_message(msg);
+    return true;
+  }
+  return false;
+}
 
 // Callback function that is called when a message has been pushed to one of your topics.
 void mqtt_callback(char* topic, byte* payload, unsigned int length) {
@@ -1083,7 +1106,7 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length) {
     } else if (strncmp(topic_command, mqtt_topic_commands, strlen(mqtt_topic_commands)) == 0)  // check for commands to heishamon
     {
       char* topic_sendcommand = topic_command + strlen(mqtt_topic_commands) + 1; //strip the first 9 "commands/" from the topic to get what we need
-      send_heatpump_command(topic_sendcommand, msg, send_command, log_message, heishamonSettings.optionalPCB);
+      send_heatpump_command(topic_sendcommand, msg, send_command, log_message, heishamonSettings.optionalPCB, skip_settings_command);
     //use this to receive valid heishamon raw data from other heishamon to debug this OT code
 #ifdef RAWDEBUG
     } else if (strcmp((char*)"panasonic_heat_pump/raw/data", topic) == 0) {  // check for raw heatpump input
@@ -1321,7 +1344,7 @@ int8_t webserver_cb(struct webserver_t *client, void *dat) {
                   strcat((char *)client->userdata, log_msg);
                   strcat((char *)client->userdata, "\n");
                   log_message(log_msg);
-                  send_command(cmd, len);
+                  if (!skip_settings_command(tmp.name, cmd, len)) send_command(cmd, len);
                 }
               }
 

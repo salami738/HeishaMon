@@ -32,6 +32,7 @@
 #define OPTDATASIZE 20
 
 bool send_command(byte* command, int length);
+bool skip_settings_command(const char *name, unsigned char *cmd, unsigned int len);
 void publishRuleExecution(const char *name, uint32_t id, int result, uint32_t duration, bool nested);
 #ifdef ESP32
 extern QueueHandle_t pcbQueue;
@@ -681,7 +682,7 @@ static int8_t vm_value_set(struct rules_t *obj) {
         if(stricmp((char *)&key[1], tmp.name) == 0) {
           uint16_t len = tmp.func(payload, cmd, log_msg);
           log_message(log_msg);
-          send_command(cmd, len);
+          if (!skip_settings_command(tmp.name, cmd, len)) send_command(cmd, len);
           break;
         }
       }

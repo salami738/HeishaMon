@@ -1333,7 +1333,7 @@ unsigned int set_solar_temp(char *msg, char *log_msg) {
 
 
 
-void send_heatpump_command(char* topic, char *msg, bool (*send_command)(byte*, int), void (*log_message)(char*), bool optionalPCB) {
+void send_heatpump_command(char* topic, char *msg, bool (*send_command)(byte*, int), void (*log_message)(char*), bool optionalPCB, bool (*skip_command)(const char*, unsigned char*, unsigned int)) {
   unsigned char cmd[256] = { 0 };
   char log_msg[256] = { 0 };
   unsigned int len = 0;
@@ -1344,7 +1344,7 @@ void send_heatpump_command(char* topic, char *msg, bool (*send_command)(byte*, i
     if (strcmp(topic, tmp.name) == 0) {
       len = tmp.func(msg, cmd, log_msg);
       log_message(log_msg);
-      if (len > 0) send_command(cmd, len);
+      if (len > 0 && !(skip_command && skip_command(tmp.name, cmd, len))) send_command(cmd, len);
     }
   }
 
@@ -1365,6 +1365,82 @@ void send_heatpump_command(char* topic, char *msg, bool (*send_command)(byte*, i
 
 }
 
+// Settings the main data block reports in the same byte and with the same
+// encoding as their command writes them; mask holds the bits of that byte that
+// belong to the setting. Such a command is not sent while the heat pump already
+// reports the requested value. Not listed: commands that start an action or a
+// timer (force DHW/defrost/sterilization/heater, holiday, powerful, reset),
+// SetPump (not reported), SetCurves (JSON).
+struct unchangedCmdStruct {
+  char name[29];
+  byte mask;
+};
+
+const unchangedCmdStruct unchangedCommands[] PROGMEM = {
+  { "SetHeatpump", 0x03 },
+  { "SetMaxPumpDuty", 0xff },
+  { "SetQuietMode", 0x38 },
+  { "SetZ1HeatRequestTemperature", 0xff },
+  { "SetZ1CoolRequestTemperature", 0xff },
+  { "SetZ2HeatRequestTemperature", 0xff },
+  { "SetZ2CoolRequestTemperature", 0xff },
+  { "SetSterilizationTemp", 0xff },
+  { "SetSterilizationMaxTime", 0xff },
+  { "SetOperationMode", 0x3f },
+  { "SetDHWTemp", 0xff },
+  { "SetZones", 0xc0 },
+  { "SetFloorHeatDelta", 0xff },
+  { "SetFloorCoolDelta", 0xff },
+  { "SetDHWHeatDelta", 0xff },
+  { "SetHeaterDelayTime", 0xff },
+  { "SetHeaterStartDelta", 0xff },
+  { "SetHeaterStopDelta", 0xff },
+  { "SetMainSchedule", 0xc0 },
+  { "SetAltExternalSensor", 0x30 },
+  { "SetExternalPadHeater", 0x30 },
+  { "SetBufferDelta", 0xff },
+  { "SetBuffer", 0x0c },
+  { "SetHeatingOffOutdoorTemp", 0xff },
+  { "SetExternalControl", 0x03 },
+  { "SetExternalError", 0x30 },
+  { "SetExternalCompressorControl", 0xc0 },
+  { "SetExternalHeatCoolControl", 0x0c },
+  { "SetBivalentControl", 0x03 },
+  { "SetBivalentMode", 0x0c },
+  { "SetBivalentStartTemp", 0xff },
+  { "SetBivalentAPStartTemp", 0xff },
+  { "SetBivalentAPStopTemp", 0xff },
+  { "SetHeatingControl", 0x0c },
+  { "SetSmartDHW", 0xc0 },
+  { "SetQuietModePriority", 0x30 },
+  { "SetPumpFlowrateMode", 0x30 },
+  { "SetDHWSensorSelection", 0x03 },
+  { "SetDHWHeaterState", 0x0c },
+  { "SetRoomHeaterState", 0x03 },
+  { "SetHeaterOnOutdoorTemp", 0xff },
+  { "SetHeatToCoolTemp", 0xff },
+  { "SetCoolToHeatTemp", 0xff },
+  { "SetRoomOperationMaxTime", 0xff },
+  { "SetDHWHeatupMaxTime", 0xff },
+  { "SetQuietModeSchedule", 0xc0 },
+};
+
+bool heatpump_command_unchanged(const char *name, const unsigned char *cmd, unsigned int len, const char *data) {
+  byte mask = 0;
+  for (unsigned int i = 0; i < sizeof(unchangedCommands) / sizeof(unchangedCommands[0]); i++) {
+    unchangedCmdStruct tmp;
+    memcpy_P(&tmp, &unchangedCommands[i], sizeof(tmp));
+    if (strcmp(name, tmp.name) == 0) mask = tmp.mask;
+  }
+  if (mask == 0 || (byte)data[0] != 0x71 || len > DATASIZE) return false;
+  bool writes = false;
+  for (unsigned int i = 4; i < len; i++) { // bytes 0-3 are the header
+    if (cmd[i] == 0) continue; // 0 keeps the current setting
+    if ((cmd[i] & ~mask) != 0 || ((byte)data[i] & mask) != cmd[i]) return false;
+    writes = true;
+  }
+  return writes;
+}
 
 bool saveOptionalPCB(byte* command, int length) {
   if (LittleFS.begin()) {

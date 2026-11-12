@@ -22,7 +22,10 @@ void setRelay1(bool state) { relays[0] = state; }
 void setRelay2(bool state) { relays[1] = state; }
 bool getRelay1() { return relays[0]; }
 bool getRelay2() { return relays[1]; }
-void send_heatpump_command(char *topic, char *payload, bool (*)(byte *, int), void (*)(char *), bool) {
+bool skip_settings_command(const char *, unsigned char *, unsigned int) { return false; }
+void send_heatpump_command(char *topic, char *payload, bool (*)(byte *, int), void (*)(char *), bool,
+                           bool (*skip)(const char *, unsigned char *, unsigned int)) {
+  assert(skip == skip_settings_command); // Modbus writes are not sent when the value is unchanged
   lastCommand = topic; lastPayload = payload;
 }
 

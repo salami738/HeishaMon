@@ -18,6 +18,7 @@ extern char actData[DATASIZE];
 extern char actDataExtra[DATASIZE];
 extern char actOptData[OPTDATASIZE];
 extern bool send_command(byte* command, int length);
+extern bool skip_settings_command(const char *name, unsigned char *cmd, unsigned int len);
 extern void log_message(char *string);
 
 namespace {
@@ -544,7 +545,7 @@ void executeWrite(const WriteRequest &request) {
   strncpy(topicName, target.name, sizeof(topicName) - 1);
   char payload[sizeof(request.payload)];
   memcpy(payload, request.payload, sizeof(payload));
-  send_heatpump_command(topicName, payload, send_command, log_message, optionalPCB);
+  send_heatpump_command(topicName, payload, send_command, log_message, optionalPCB, skip_settings_command);
 }
 
 }  // namespace
