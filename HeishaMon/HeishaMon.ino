@@ -1050,7 +1050,6 @@ bool send_command(byte* command, int length) {
 // Minute buckets keep a sliding hour in 60 bytes of RAM.
 static unsigned int settingsChangesLastHour() {
   unsigned long minute = millis() / 60000UL;
-  // Also covers the millis() overflow after about 49.7 days: the unsigned difference gets huge, and the loop below would otherwise run through billions of minutes.
   if (minute - settingsChangesMinute >= 60) {
     memset(settingsChanges, 0, sizeof(settingsChanges));
     settingsChangesMinute = minute;
