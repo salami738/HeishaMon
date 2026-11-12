@@ -120,6 +120,10 @@ char actOptData[OPTDATASIZE]  = { '\0' };
 // main data blocks received since the last settings command was sent, and when the last one arrived
 static uint8_t mainBlocksSinceCommand = 0;
 static unsigned long lastMainBlockTime = 0;
+// settings commands sent per minute in the last hour (index: minutes since boot % 60)
+static uint8_t settingsChanges[60] = { 0 };
+static unsigned long settingsChangesMinute = 0;
+static unsigned long lastSettingsChangeWarning = 0;
 
 // log message to sprintf to
 #define LOG_MSG_SIZE 256
@@ -1044,12 +1048,41 @@ bool send_command(byte* command, int length) {
 }
 #endif
 
+// Settings commands sent to the heat pump in the last hour, counted per minute.
+static unsigned int settingsChangesLastHour() {
+  unsigned long minute = millis() / 60000UL;
+  if (minute - settingsChangesMinute >= 60) { // also after millis() wrapped
+    memset(settingsChanges, 0, sizeof(settingsChanges));
+    settingsChangesMinute = minute;
+  }
+  while (settingsChangesMinute != minute) settingsChanges[++settingsChangesMinute % 60] = 0;
+  unsigned int count = 0;
+  for (uint8_t i = 0; i < 60; i++) count += settingsChanges[i];
+  return count;
+}
+
+// Nothing is blocked: more than settingsChangeWarn changes within an hour only
+// log a warning, at most one per hour, naming the command that crossed it.
+static void countSettingsChange(const char *name) {
+  unsigned int count = settingsChangesLastHour() + 1;
+  if (settingsChanges[settingsChangesMinute % 60] < 255) settingsChanges[settingsChangesMinute % 60]++;
+  if (heishamonSettings.settingsChangeWarn == 0 || count <= heishamonSettings.settingsChangeWarn) return;
+  if (lastSettingsChangeWarning != 0 && (unsigned long)(millis() - lastSettingsChangeWarning) < 3600000UL) return;
+  lastSettingsChangeWarning = millis() ? millis() : 1;
+  char msg[160];
+  snprintf_P(msg, sizeof(msg), PSTR("Warning: %u settings changes sent to the heat pump in the last hour (warning above %u), last one %s"),
+             count, heishamonSettings.settingsChangeWarn, name);
+  log_message(msg);
+}
+
 // Called before a settings command built from commands[] is sent; true means
 // it is not sent. That is the case when the heat pump already reports the value
 // the command would set. The data is only trusted when it is fresh: two main
 // data blocks since the last settings command was sent (the first may not show
-// it yet) and the last one not older than three query intervals.
+// it yet) and the last one not older than three query intervals. Every command
+// that is sent counts as a settings change.
 bool skip_settings_command(const char *name, unsigned char *cmd, unsigned int len) {
+  if (len == 0 || heishamonSettings.listenonly) return false; // send_command() drops it
   if (mainBlocksSinceCommand >= 2 && (unsigned long)(millis() - lastMainBlockTime) <= 3000UL * heishamonSettings.waitTime
       && heatpump_command_unchanged(name, cmd, len, actData)) {
     char msg[96];
@@ -1057,6 +1090,7 @@ bool skip_settings_command(const char *name, unsigned char *cmd, unsigned int le
     log_message(msg);
     return true;
   }
+  countSettingsChange(name);
   return false;
 }
 
@@ -2390,6 +2424,8 @@ void loop() {
     stats += toolongread;
     stats += F(",\"timeout reads\":");
     stats += timeoutread;
+    stats += F(",\"settings changes last hour\":");
+    stats += settingsChangesLastHour();
     stats += F(",\"version\":\"");
     stats += heishamon_version;
     stats += F("\",\"board\":\"");
