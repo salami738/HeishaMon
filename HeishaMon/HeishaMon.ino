@@ -1051,7 +1051,10 @@ bool send_command(byte* command, int length) {
 // Settings commands sent to the heat pump in the last hour, counted per minute.
 static unsigned int settingsChangesLastHour() {
   unsigned long minute = millis() / 60000UL;
-  if (minute - settingsChangesMinute >= 60) { // also after millis() wrapped
+  // More than an hour since the last count: start over. This also catches the
+  // millis() overflow after about 49.7 days: the unsigned difference is then
+  // huge, and the loop below would otherwise count up through billions of minutes.
+  if (minute - settingsChangesMinute >= 60) {
     memset(settingsChanges, 0, sizeof(settingsChanges));
     settingsChangesMinute = minute;
   }
