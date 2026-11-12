@@ -275,7 +275,7 @@ void loadSettings(settingsStruct *heishamonSettings) {
           if ( jsonDoc[F("updateAllTime")]) heishamonSettings->updateAllTime = jsonDoc[F("updateAllTime")];
           if (heishamonSettings->updateAllTime < heishamonSettings->waitTime) heishamonSettings->updateAllTime = heishamonSettings->waitTime;
           if ( jsonDoc[F("updataAllDallasTime")]) heishamonSettings->updataAllDallasTime = jsonDoc[F("updataAllDallasTime")];
-          if (!jsonDoc[F("settingsChangeWarn")].isNull()) heishamonSettings->settingsChangeWarn = jsonDoc[F("settingsChangeWarn")]; // 0 = off
+          if (!jsonDoc[F("settingsChangeWarn")].isNull()) heishamonSettings->settingsChangeWarn = jsonDoc[F("settingsChangeWarn")]; // isNull() instead of a truth test, so a stored 0 (off) is kept
           if (heishamonSettings->updataAllDallasTime < heishamonSettings->waitDallasTime) heishamonSettings->updataAllDallasTime = heishamonSettings->waitDallasTime;
           //if (jsonDoc[F("s0_1_gpio")]) heishamonSettings->s0Settings[0].gpiopin = jsonDoc[F("s0_1_gpio")];
           if (jsonDoc[F("s0_1_ppkwh")]) heishamonSettings->s0Settings[0].ppkwh = jsonDoc[F("s0_1_ppkwh")];
